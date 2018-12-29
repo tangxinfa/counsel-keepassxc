@@ -28,78 +28,240 @@
 (defvar counsel-keepassxc-database-file nil
   "Keepassxc password database file.")
 
-(defun counsel-keepassxc--candidates (master-password search-keywords)
+(defun counsel-keepassxc--candidates (master-password)
   "Return list of `counsel-keepassxc' candidates.
-MASTER-PASSWORD is required to open database, SEARCH-KEYWORDS for filter entries."
+MASTER-PASSWORD is required to open database."
   (unless counsel-keepassxc-database-file
     (signal
      'file-error
      (list "Opening `counsel-keepassxc-database-file'" "No such readable file"
            counsel-keepassxc-database-file)))
   (let* ((entries (with-temp-buffer (insert master-password)
-                                    (call-process-region (point-min)
-                                                         (point-max) "keepassxc-cli" t t nil
-                                                         "locate" (expand-file-name
-                                                                   counsel-keepassxc-database-file)
-                                                         search-keywords)
+                                    (if (not (eq 0 (call-process-region (point-min)
+                                                                        (point-max) "keepassxc-cli"
+                                                                        t t nil "locate"
+                                                                        (expand-file-name
+                                                                         counsel-keepassxc-database-file)
+                                                                        "")))
+                                        (error
+                                         "Error: execute keepassxc-cli locate failed"))
                                     (split-string (buffer-string) "\n")))
          (candidates (remove nil (mapcar (lambda (entry)
                                            (unless (string-prefix-p "Insert password to unlock"
                                                                     entry)
                                              (list entry master-password))) entries)))) candidates))
 
-(defun counsel-keepassxc--get-field (candidate field)
-  "Get FIELD of CANDIDATE."
-  (let ((rows (remove nil (with-temp-buffer (insert (cadr candidate))
-                                            (call-process-region (point-min)
-                                                                 (point-max) "keepassxc-cli" t t nil
-                                                                 "show" (expand-file-name
-                                                                         counsel-keepassxc-database-file)
-                                                                 (car candidate))
-                                            (split-string (buffer-string) "\n" t))))
-        (value nil)
-        (prefix (concat field ": ")))
-    (mapcar (lambda (row)
-              (when (and (not (string-prefix-p "Insert password to unlock" row))
-                         (string-prefix-p prefix row))
-                (setq value (trim-string (substring row (length prefix)))))) rows) value))
+(defun counsel-keepassxc--entry-parse ()
+  "Parse entry in current buffer."
+  (save-excursion (goto-char (point-min))
+                  (let ((entry)
+                        (fields))
+                    (while (not (eobp))
+                      (setq fields (split-string
+                                    (buffer-substring
+                                     (point)
+                                     (point-at-eol))
+                                    ": "))
+                      (if (member (car fields)
+                                  '("Title" "UserName" "Password" "URL" "Notes"))
+                          (add-to-list 'entry (cons (car fields)
+                                                    (trim-string (string-join (cdr fields) ": ")))
+                                       t))
+                      (beginning-of-line 2)) entry)))
 
-(defun counsel-keepassxc--insert-password (candidate)
-  "Insert password of CANDIDATE into current buffer."
-  (insert (counsel-keepassxc--get-field candidate "Password")))
+(defun counsel-keepassxc--entry-get (candidate)
+  "Get entry match CANDIDATE."
+  (with-temp-buffer (insert (cadr candidate))
+                    (if (not (eq 0 (call-process-region (point-min)
+                                                        (point-max) "keepassxc-cli" t t nil "show"
+                                                        (expand-file-name
+                                                         counsel-keepassxc-database-file)
+                                                        (car candidate))))
+                        (error
+                         "Error: execute keepassxc-cli show failed"))
+                    (counsel-keepassxc--entry-parse)))
 
-(defun counsel-keepassxc--insert-username (candidate)
-  "Insert username of CANDIDATE into current buffer."
-  (insert (counsel-keepassxc--get-field candidate "UserName")))
+(defun counsel-keepassxc--copy-password (candidate)
+  "Copy password of CANDIDATE into current buffer."
+  (kill-new (assoc-default "Password" (counsel-keepassxc--entry-get candidate) nil "")))
 
-(defun counsel-keepassxc--insert-url (candidate)
-  "Insert url of CANDIDATE into current buffer."
-  (insert (counsel-keepassxc--get-field candidate "URL")))
+(defun counsel-keepassxc--copy-username (candidate)
+  "Copy username of CANDIDATE into current buffer."
+  (kill-new (assoc-default "UserName" (counsel-keepassxc--entry-get candidate) nil "")))
 
-(defun counsel-keepassxc--insert-title (candidate)
-  "Insert title of CANDIDATE into current buffer."
-  (insert (counsel-keepassxc--get-field candidate "Title")))
+(defun counsel-keepassxc--copy-url (candidate)
+  "Copy url of CANDIDATE into current buffer."
+  (kill-new (assoc-default "URL" (counsel-keepassxc--entry-get candidate) nil "")))
 
-(defun counsel-keepassxc--insert-notes (candidate)
-  "Insert notes of CANDIDATE into current buffer."
-  (insert (counsel-keepassxc--get-field candidate "Notes")))
+(defun counsel-keepassxc--copy-notes (candidate)
+  "Copy notes of CANDIDATE into current buffer."
+  (kill-new (assoc-default "Notes" (counsel-keepassxc--entry-get candidate) nil "")))
 
-(ivy-set-actions 'counsel-keepassxc '(("p" counsel-keepassxc--insert-password "insert password")
-                                      ("u" counsel-keepassxc--insert-username "insert username")
-                                      ("l" counsel-keepassxc--insert-url "insert url")
-                                      ("t" counsel-keepassxc--insert-title "insert title")
-                                      ("n" counsel-keepassxc--insert-notes "insert notes")))
+(defun counsel-keepassxc--entry-commit ()
+  "Commit added or edited entry."
+  (interactive)
+  (let* ((entry (counsel-keepassxc--entry-parse))
+         (return nil)
+         (entry-buffer (current-buffer))
+         (generates (split-string (assoc-default "Password" entry nil "") "Generate"))
+         (args nil)
+         (action (buffer-local-value 'keepassxc-action entry-buffer)))
+    (unless (or (string= action "edit")
+                (string= action "add"))
+      (error
+       "Error: commit not allowed when %s keepassxc entry"
+       action))
+    (with-temp-buffer (insert (cadr (buffer-local-value 'keepassxc-candidate entry-buffer)))
+                      (insert "\n")
+                      (when (< (length generates) 2)
+                        (insert (assoc-default "Password" entry nil ""))
+                        (insert "\n"))
+                      (setq args (list (point-min)
+                                       (point-max) "keepassxc-cli" t nil t action (expand-file-name
+                                                                                   counsel-keepassxc-database-file)
+                                       (assoc-default "Title" entry nil "") "-u" (assoc-default
+                                                                                  "UserName" entry
+                                                                                  nil "") "--url"
+                                                                                  (assoc-default
+                                                                                   "URL" entry nil
+                                                                                   "")))
+                      (if (< (length generates) 2)
+                          (add-to-list 'args "-p" t)
+                        (add-to-list 'args "-g" t)
+                        (when (> (string-to-number (second generates)) 0)
+                          (add-to-list 'args "-l" t)
+                          (add-to-list 'args (second generates) t)))
+                      (setq return (apply 'call-process-region args)))
+    (if (not (eq return 0))
+        (error
+         "Error: execute keepassxc-cli %s failed"
+         action)
+      (kill-buffer entry-buffer)
+      (message "keepassxc-cli %s entry \"%s\" succeed" action (assoc-default "Title" entry nil
+                                                                             "")))))
+
+(defun counsel-keepassxc--entry-edit ()
+  "Enter edit entry mode."
+  (interactive)
+  (unless (eq major-mode 'counsel-keepassxc-entry-mode)
+    (error
+     "Error: major-mode must be `counsel-keepassxc-entry-mode'"))
+  (let ((candidate keepassxc-candidate))
+    (kill-buffer (current-buffer))
+    (counsel-keepassxc--edit candidate)))
+
+(defun counsel-keepassxc--entry-abort ()
+  "Abort added or edited entry."
+  (interactive)
+  (kill-buffer (current-buffer)))
+
+(setq counsel-keepassxc-entry-highlights '(("^Password: Generate[0-9]*" . font-lock-keyword-face)
+                                           ("^Title: \\|^UserName: \\|^Password: \\|^URL: \\|^Notes: "
+                                            . font-lock-type-face)))
+
+(defvar counsel-keepassxc-entry-mode-map (make-sparse-keymap)
+  "Keymap for `counsel-keepassxc-entry-mode'.")
+(define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-c") 'counsel-keepassxc--entry-commit)
+(define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-e") 'counsel-keepassxc--entry-edit)
+(define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-k") 'counsel-keepassxc--entry-abort)
+
+(define-derived-mode counsel-keepassxc-entry-mode text-mode
+  "counsel-keepassxc-entry-mode"
+  "major mode for editing keepassxc entry."
+  (setq font-lock-defaults '(counsel-keepassxc-entry-highlights)))
+
+(defun counsel-keepassxc--view
+    (&optional
+     candidate)
+  "View entry.
+CANDIDATE to view."
+  (let ((buffer (generate-new-buffer "*keepassxc-view*"))
+        (entry (counsel-keepassxc--entry-get candidate)))
+    (with-current-buffer buffer (counsel-keepassxc-entry-mode)
+                         (insert (format
+                                  "%s\nTitle: %s\nUserName: %s\nPassword: %s\nURL: %s\nNotes: %s\n"
+                                  (propertize "View Keepassxc Entry.\n========================"
+                                              'face 'font-lock-comment-face)
+                                  (assoc-default "Title" entry nil "")
+                                  (assoc-default "UserName" entry nil "")
+                                  (assoc-default "Password" entry nil "")
+                                  (assoc-default "URL" entry nil "")
+                                  (assoc-default "Notes" entry nil "")))
+                         (goto-line 3)
+                         (goto-char (point-at-eol))
+                         (read-only-mode)
+                         (set (make-local-variable 'keepassxc-candidate) candidate)
+                         (set (make-local-variable 'keepassxc-action) "view"))
+    (switch-to-buffer buffer)))
+
+(defun counsel-keepassxc--edit
+    (&optional
+     candidate)
+  "Edit entry.
+CANDIDATE to edit."
+  (let ((buffer (generate-new-buffer "*keepassxc-edit*"))
+        (entry (counsel-keepassxc--entry-get candidate)))
+    (with-current-buffer buffer (insert (format
+                                         "Edit Keepassxc Entry.\n========================\nTitle: %s\nUserName: %s\nPassword: %s\nURL: %s\n"
+                                         (assoc-default "Title" entry nil "")
+                                         (assoc-default "UserName" entry nil "")
+                                         (assoc-default "Password" entry nil "")
+                                         (assoc-default "URL" entry nil "")))
+                         (goto-line 3)
+                         (goto-char (point-at-eol))
+                         (counsel-keepassxc-entry-mode)
+                         (set (make-local-variable 'keepassxc-candidate) candidate)
+                         (set (make-local-variable 'keepassxc-action) "edit"))
+    (switch-to-buffer buffer)))
+
+(defun counsel-keepassxc--add
+    (&optional
+     candidate)
+  "Add entry.
+CANDIDATE is useless."
+  (let ((buffer (generate-new-buffer "*keepassxc-add*")))
+    (with-current-buffer buffer (insert
+                                 "Add Keepassxc Entry.\n========================\nTitle: \nUserName: \nPassword: Generate10\nURL: \n")
+                         (goto-line 3)
+                         (goto-char (point-at-eol))
+                         (counsel-keepassxc-entry-mode)
+                         (set (make-local-variable 'keepassxc-candidate) candidate)
+                         (set (make-local-variable 'keepassxc-action) "add"))
+    (switch-to-buffer buffer)))
+
+(defun counsel-keepassxc--delete
+    (&optional
+     candidate)
+  "Delete entry.
+CANDIDATE is the entry to delete."
+  (with-temp-buffer (insert (cadr candidate))
+                    (if (not (eq 0 (call-process-region (point-min)
+                                                        (point-max) "keepassxc-cli" t t nil "rm"
+                                                        (expand-file-name
+                                                         counsel-keepassxc-database-file)
+                                                        (car candidate))))
+                        (error
+                         "Error: execute keepassxc-cli delete failed"
+                         (car candidate))
+                      (message "keepassxc-cli delete entry \"%s\" succeed" (car candidate)))))
+
+(ivy-set-actions 'counsel-keepassxc '(("u" counsel-keepassxc--copy-username "copy username")
+                                      ("p" counsel-keepassxc--copy-password "copy password")
+                                      ("l" counsel-keepassxc--copy-url "copy url")
+                                      ("n" counsel-keepassxc--copy-notes "copy notes")
+                                      ("e" counsel-keepassxc--edit "edit entry")
+                                      ("a" counsel-keepassxc--add "add entry")
+                                      ("d" counsel-keepassxc--delete "delete entry")))
 
 ;;;###autoload
-(defun counsel-keepassxc (search-keywords)
-  "Complete keepassxc password with Ivy.
-SEARCH-KEYWORDS for filter entries."
-  (interactive "MSearch keepassxc: ")
+(defun counsel-keepassxc ()
+  "Complete keepassxc password with Ivy."
+  (interactive)
   (let ((master-password (read-passwd (format "Master password for %s: "
                                               counsel-keepassxc-database-file))))
-    (ivy-read "keepassxc: " (counsel-keepassxc--candidates master-password search-keywords)
+    (ivy-read "keepassxc: " (counsel-keepassxc--candidates master-password)
               :history 'counsel-keepassxc-history
-              :action #'counsel-keepassxc--insert-password
+              :action #'counsel-keepassxc--view
               :caller 'counsel-keepassxc
               :require-match t)))
 
