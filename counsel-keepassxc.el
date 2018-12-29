@@ -187,7 +187,7 @@ CANDIDATE to view."
                                   (assoc-default "Password" entry nil "")
                                   (assoc-default "URL" entry nil "")
                                   (assoc-default "Notes" entry nil "")))
-                         (goto-line 3)
+                         (forward-line 3)
                          (goto-char (point-at-eol))
                          (read-only-mode)
                          (set (make-local-variable 'keepassxc-candidate) candidate)
@@ -207,7 +207,7 @@ CANDIDATE to edit."
                                          (assoc-default "UserName" entry nil "")
                                          (assoc-default "Password" entry nil "")
                                          (assoc-default "URL" entry nil "")))
-                         (goto-line 3)
+                         (forward-line 3)
                          (goto-char (point-at-eol))
                          (counsel-keepassxc-entry-mode)
                          (set (make-local-variable 'keepassxc-candidate) candidate)
@@ -222,7 +222,7 @@ CANDIDATE is useless."
   (let ((buffer (generate-new-buffer "*keepassxc-add*")))
     (with-current-buffer buffer (insert
                                  "Add Keepassxc Entry.\n========================\nTitle: \nUserName: \nPassword: Generate10\nURL: \n")
-                         (goto-line 3)
+                         (forward-line 3)
                          (goto-char (point-at-eol))
                          (counsel-keepassxc-entry-mode)
                          (set (make-local-variable 'keepassxc-candidate) candidate)
@@ -241,8 +241,7 @@ CANDIDATE is the entry to delete."
                                                          counsel-keepassxc-database-file)
                                                         (car candidate))))
                         (error
-                         "Error: execute keepassxc-cli delete failed"
-                         (car candidate))
+                         "Error: execute keepassxc-cli delete failed")
                       (message "keepassxc-cli delete entry \"%s\" succeed" (car candidate)))))
 
 (ivy-set-actions 'counsel-keepassxc '(("u" counsel-keepassxc--copy-username "copy username")
