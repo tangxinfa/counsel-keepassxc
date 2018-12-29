@@ -179,15 +179,13 @@ CANDIDATE to view."
         (entry (counsel-keepassxc--entry-get candidate)))
     (with-current-buffer buffer (counsel-keepassxc-entry-mode)
                          (insert (format
-                                  "%s\nTitle: %s\nUserName: %s\nPassword: %s\nURL: %s\nNotes: %s\n"
-                                  (propertize "View Keepassxc Entry.\n========================"
-                                              'face 'font-lock-comment-face)
+                                  "View Keepassxc Entry.\n========================\nTitle: %s\nUserName: %s\nPassword: %s\nURL: %s\nNotes: %s\n"
                                   (assoc-default "Title" entry nil "")
                                   (assoc-default "UserName" entry nil "")
                                   (assoc-default "Password" entry nil "")
                                   (assoc-default "URL" entry nil "")
                                   (assoc-default "Notes" entry nil "")))
-                         (forward-line 3)
+                         (forward-line -5)
                          (goto-char (point-at-eol))
                          (read-only-mode)
                          (set (make-local-variable 'keepassxc-candidate) candidate)
@@ -207,22 +205,38 @@ CANDIDATE to edit."
                                          (assoc-default "UserName" entry nil "")
                                          (assoc-default "Password" entry nil "")
                                          (assoc-default "URL" entry nil "")))
-                         (forward-line 3)
+                         (forward-line -3)
                          (goto-char (point-at-eol))
                          (counsel-keepassxc-entry-mode)
                          (set (make-local-variable 'keepassxc-candidate) candidate)
                          (set (make-local-variable 'keepassxc-action) "edit"))
     (switch-to-buffer buffer)))
 
-(defun counsel-keepassxc--add
-    (&optional
-     candidate)
+(defun counsel-keepassxc--add (candidate)
   "Add entry.
 CANDIDATE is useless."
   (let ((buffer (generate-new-buffer "*keepassxc-add*")))
     (with-current-buffer buffer (insert
                                  "Add Keepassxc Entry.\n========================\nTitle: \nUserName: \nPassword: Generate10\nURL: \n")
-                         (forward-line 3)
+                         (forward-line -4)
+                         (goto-char (point-at-eol))
+                         (counsel-keepassxc-entry-mode)
+                         (set (make-local-variable 'keepassxc-candidate) candidate)
+                         (set (make-local-variable 'keepassxc-action) "add"))
+    (switch-to-buffer buffer)))
+
+(defun counsel-keepassxc--clone (candidate)
+  "Clone entry.
+CANDIDATE is useless."
+  (let ((buffer (generate-new-buffer "*keepassxc-clone*"))
+        (entry (counsel-keepassxc--entry-get candidate)))
+    (with-current-buffer buffer (insert (format
+                                         "Clone Keepassxc Entry.\n========================\nTitle: %s\nUserName: %s\nPassword: %s\nURL: %s\n"
+                                         (assoc-default "Title" entry nil "")
+                                         (assoc-default "UserName" entry nil "")
+                                         (assoc-default "Password" entry nil "")
+                                         (assoc-default "URL" entry nil "")))
+                         (forward-line -4)
                          (goto-char (point-at-eol))
                          (counsel-keepassxc-entry-mode)
                          (set (make-local-variable 'keepassxc-candidate) candidate)
@@ -248,8 +262,9 @@ CANDIDATE is the entry to delete."
                                       ("p" counsel-keepassxc--copy-password "copy password")
                                       ("l" counsel-keepassxc--copy-url "copy url")
                                       ("n" counsel-keepassxc--copy-notes "copy notes")
-                                      ("e" counsel-keepassxc--edit "edit entry")
                                       ("a" counsel-keepassxc--add "add entry")
+                                      ("c" counsel-keepassxc--clone "clone entry")
+                                      ("e" counsel-keepassxc--edit "edit entry")
                                       ("d" counsel-keepassxc--delete "delete entry")))
 
 ;;;###autoload
