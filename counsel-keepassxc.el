@@ -105,12 +105,20 @@ MASTER-PASSWORD is required to open database."
          (entry-buffer (current-buffer))
          (generates (split-string (assoc-default "Password" entry nil "") "Generate"))
          (args nil)
-         (action (buffer-local-value 'keepassxc-action entry-buffer)))
+         (action (buffer-local-value 'keepassxc-action entry-buffer))
+         (candidate (buffer-local-value 'keepassxc-candidate entry-buffer))
+         (delete-old nil))
     (unless (or (string= action "edit")
                 (string= action "add"))
       (error
        "Error: commit not allowed when %s keepassxc entry"
        action))
+;;; If title changed when editing, treat as add a new entry and delete old entry.
+    (when (and (string= action "edit")
+               (not (string= (string-trim-left (car candidate) "/")
+                             (string-trim-left (assoc-default "Title" entry nil "") "/"))))
+      (setq action "add")
+      (setq delete-old t))
     (with-temp-buffer (insert (cadr (buffer-local-value 'keepassxc-candidate entry-buffer)))
                       (insert "\n")
                       (when (< (length generates) 2)
@@ -136,6 +144,7 @@ MASTER-PASSWORD is required to open database."
         (error
          "Error: execute keepassxc-cli %s failed"
          action)
+      (when delete-old (counsel-keepassxc--delete candidate))
       (kill-buffer entry-buffer)
       (message "keepassxc-cli %s entry \"%s\" succeed" action (assoc-default "Title" entry nil
                                                                              "")))))
@@ -155,6 +164,13 @@ MASTER-PASSWORD is required to open database."
   (interactive)
   (kill-buffer (current-buffer)))
 
+(defun counsel-keepassxc--entry-next-field ()
+  "Move to next field."
+  (interactive)
+  (unless (search-forward ": " nil t)
+    (goto-char (point-min))
+    (search-forward ": ")))
+
 (setq counsel-keepassxc-entry-highlights '(("^Password: Generate[0-9]*" . font-lock-keyword-face)
                                            ("^Title: \\|^UserName: \\|^Password: \\|^URL: \\|^Notes: "
                                             . font-lock-type-face)))
@@ -164,6 +180,7 @@ MASTER-PASSWORD is required to open database."
 (define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-c") 'counsel-keepassxc--entry-commit)
 (define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-e") 'counsel-keepassxc--entry-edit)
 (define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-k") 'counsel-keepassxc--entry-abort)
+(define-key counsel-keepassxc-entry-mode-map (kbd "TAB") 'counsel-keepassxc--entry-next-field)
 
 (define-derived-mode counsel-keepassxc-entry-mode text-mode
   "counsel-keepassxc-entry-mode"
@@ -205,7 +222,7 @@ CANDIDATE to edit."
                                          (assoc-default "UserName" entry nil "")
                                          (assoc-default "Password" entry nil "")
                                          (assoc-default "URL" entry nil "")))
-                         (forward-line -3)
+                         (forward-line -4)
                          (goto-char (point-at-eol))
                          (counsel-keepassxc-entry-mode)
                          (set (make-local-variable 'keepassxc-candidate) candidate)
@@ -243,9 +260,7 @@ CANDIDATE is useless."
                          (set (make-local-variable 'keepassxc-action) "add"))
     (switch-to-buffer buffer)))
 
-(defun counsel-keepassxc--delete
-    (&optional
-     candidate)
+(defun counsel-keepassxc--delete (candidate)
   "Delete entry.
 CANDIDATE is the entry to delete."
   (with-temp-buffer (insert (cadr candidate))
