@@ -65,7 +65,7 @@ MASTER-PASSWORD is required to open database."
                       (if (member (car fields)
                                   '("Title" "UserName" "Password" "URL" "Notes"))
                           (add-to-list 'entry (cons (car fields)
-                                                    (trim-string (string-join (cdr fields) ": ")))
+                                                    (string-trim (string-join (cdr fields) ": ")))
                                        t))
                       (beginning-of-line 2)) entry)))
 
