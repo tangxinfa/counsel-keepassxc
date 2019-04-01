@@ -42,7 +42,7 @@ MASTER-PASSWORD is required to open database."
                                                                         t t nil "locate"
                                                                         (expand-file-name
                                                                          counsel-keepassxc-database-file)
-                                                                        "")))
+                                                                        "/")))
                                         (error
                                          "Error: execute keepassxc-cli locate failed"))
                                     (split-string (buffer-string) "\n")))
