@@ -53,7 +53,7 @@
           (remove nil
                   (mapcar
                    (lambda (entry)
-                     (unless (string-prefix-p "Insert password to unlock"
+                     (unless (string-prefix-p "Enter password to unlock"
                                               entry)
                        (list entry master-password)))
                    entries))))
@@ -182,9 +182,11 @@
   (unless (eq major-mode 'counsel-keepassxc-entry-mode)
     (error
      "Error: major-mode must be `counsel-keepassxc-entry-mode'"))
-  (let ((candidate keepassxc-candidate))
+  (let ((candidate keepassxc-candidate)
+        (position (point)))
     (kill-buffer (current-buffer))
-    (counsel-keepassxc--edit candidate)))
+    (counsel-keepassxc--edit candidate)
+    (goto-char position)))
 
 (defun counsel-keepassxc--entry-abort ()
   "Abort added or edited entry."
