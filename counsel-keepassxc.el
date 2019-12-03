@@ -94,6 +94,7 @@
                        "keepassxc-cli"
                        t t nil
                        "show"
+                       "--show-protected"
                        (expand-file-name
                         counsel-keepassxc-database-file)
                        entry-path)))
