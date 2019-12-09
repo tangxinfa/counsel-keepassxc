@@ -164,7 +164,7 @@
           (add-to-list 'args "-p" t)
         (add-to-list 'args "-g" t)
         (when (> (string-to-number (second generates)) 0)
-          (add-to-list 'args "-l" t)
+          (add-to-list 'args "-L" t)
           (add-to-list 'args (second generates) t)))
       (setq return (apply 'call-process-region args)))
     (if (not (eq return 0))
