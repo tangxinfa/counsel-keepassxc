@@ -311,12 +311,28 @@
                                       ("e" counsel-keepassxc--edit "edit entry")
                                       ("d" counsel-keepassxc--delete "delete entry")))
 
+(defun counsel-keepassxc--read-password ()
+  (read-passwd
+   (format
+    "Master password for %s: "
+    counsel-keepassxc-database-file)))
+
+(defun counsel-keepassxc-get-password (path &optional master-password)
+  "Get password by entry path."
+  (assoc-default
+   "Password"
+   (counsel-keepassxc--entry-get
+    (list
+     path
+     (or
+      master-password
+      (counsel-keepassxc--read-password))))))
+
 ;;;###autoload
 (defun counsel-keepassxc ()
   "Complete keepassxc password with Ivy."
   (interactive)
-  (let ((master-password (read-passwd (format "Master password for %s: "
-                                              counsel-keepassxc-database-file))))
+  (let ((master-password (counsel-keepassxc--read-password)))
     (ivy-read "keepassxc: " (counsel-keepassxc--candidates master-password)
               :history 'counsel-keepassxc-history
               :action #'counsel-keepassxc--view
