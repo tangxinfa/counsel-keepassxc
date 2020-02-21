@@ -25,7 +25,7 @@ Type `M-o` to call other actions
 
    `n` copy notes
 
-   't' copy TOTP
+   `t` copy TOTP
 
    `a` add entry
 
