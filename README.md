@@ -25,6 +25,8 @@ Type `M-o` to call other actions
 
    `n` copy notes
 
+   't' copy TOTP
+
    `a` add entry
 
    `c` clone entry
@@ -33,7 +35,7 @@ Type `M-o` to call other actions
 
    `d` delete entry
 
-    
+
 `view` `add` `clone` `edit` a entry will open a entry buffer with keybindings
 
    `C-c C-k` kill entry buffer without commit
@@ -43,4 +45,3 @@ Type `M-o` to call other actions
    `C-c C-e` enter edit mode
 
    `TAB` move to next field
-

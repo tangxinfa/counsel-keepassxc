@@ -338,10 +338,16 @@
                                       ("d" counsel-keepassxc--delete "delete entry")))
 
 (defun counsel-keepassxc--read-password ()
-  (read-passwd
-   (format
-    "Master password for %s: "
-    counsel-keepassxc-database-file)))
+  (let ((entry-buffer (or (get-buffer "*keepassxc-view*")
+                          (get-buffer "*keepassxc-edit*")
+                          (get-buffer "*keepassxc-add*"))))
+    (if entry-buffer
+        (with-current-buffer entry-buffer
+          (cadr (buffer-local-value 'keepassxc-candidate entry-buffer)))
+      (read-passwd
+       (format
+        "Master password for %s: "
+        counsel-keepassxc-database-file)))))
 
 (defun counsel-keepassxc-get-password (path &optional master-password)
   "Get password by entry path."
