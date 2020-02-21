@@ -119,6 +119,31 @@
   "Copy notes of CANDIDATE into current buffer."
   (kill-new (assoc-default "Notes" (counsel-keepassxc--entry-get candidate) nil "")))
 
+(defun counsel-keepassxc--copy-totp (candidate)
+  "Copy TOTP of CANDIDATE into current buffer."
+  (kill-new
+   (with-temp-buffer
+     (insert (cadr candidate))
+     (let* ((entry-path (car candidate))
+            (args (list (point-min)
+                        (point-max)
+                        "keepassxc-cli"
+                        t t nil
+                        "show"
+                        "--totp"
+                        (expand-file-name
+                         counsel-keepassxc-database-file)
+                        entry-path)))
+       (if (not (eq 0 (apply 'call-process-region args)))
+           (error
+            "Error: execute keepassxc-cli show failed"))
+       (save-excursion
+         (goto-char (point-min))
+         (beginning-of-line 2)
+         (buffer-substring
+          (point)
+          (point-at-eol)))))))
+
 (defun counsel-keepassxc--entry-commit ()
   "Commit added or edited entry."
   (interactive)
@@ -306,6 +331,7 @@
                                       ("p" counsel-keepassxc--copy-password "copy password")
                                       ("l" counsel-keepassxc--copy-url "copy url")
                                       ("n" counsel-keepassxc--copy-notes "copy notes")
+                                      ("t" counsel-keepassxc--copy-totp "copy TOTP")
                                       ("a" counsel-keepassxc--add "add entry")
                                       ("c" counsel-keepassxc--clone "clone entry")
                                       ("e" counsel-keepassxc--edit "edit entry")
