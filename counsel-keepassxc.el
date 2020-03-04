@@ -363,15 +363,16 @@
 (defvar counsel-keepassxc-default-action #'counsel-keepassxc--view "`counsel-keepassxc' default action.")
 
 ;;;###autoload
-(defun counsel-keepassxc ()
+(defun counsel-keepassxc (&optional master-password)
   "Complete keepassxc password with Ivy."
   (interactive)
-  (let ((master-password (counsel-keepassxc--read-password)))
-    (ivy-read "keepassxc: " (counsel-keepassxc--candidates master-password)
-              :history 'counsel-keepassxc-history
-              :action counsel-keepassxc-default-action
-              :caller 'counsel-keepassxc
-              :require-match t)))
+  (ivy-read "keepassxc: "
+            (counsel-keepassxc--candidates
+             (or master-password (counsel-keepassxc--read-password)))
+            :history 'counsel-keepassxc-history
+            :action counsel-keepassxc-default-action
+            :caller 'counsel-keepassxc
+            :require-match t))
 
 (provide 'counsel-keepassxc)
 
