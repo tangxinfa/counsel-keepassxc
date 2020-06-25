@@ -360,6 +360,17 @@
       master-password
       (counsel-keepassxc--read-password))))))
 
+(defun counsel-keepassxc-get-username (path &optional master-password)
+  "Get username by entry path."
+  (assoc-default
+   "UserName"
+   (counsel-keepassxc--entry-get
+    (list
+     path
+     (or
+      master-password
+      (counsel-keepassxc--read-password))))))
+
 (defvar counsel-keepassxc-default-action #'counsel-keepassxc--view "`counsel-keepassxc' default action.")
 
 ;;;###autoload
