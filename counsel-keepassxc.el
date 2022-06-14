@@ -42,12 +42,12 @@
                              (point-max)
                              "keepassxc-cli"
                              t t nil
-                             "locate"
+                             "search"
                              (expand-file-name counsel-keepassxc-database-file)
-                             "/"))
+                             ""))
             (if (not (eq 0 (apply 'call-process-region args)))
                 (error
-                 "Error: execute keepassxc-cli locate failed"))
+                 "Error: execute keepassxc-cli search failed"))
             (split-string (buffer-string) "\n")))
          (candidates
           (remove nil
@@ -232,6 +232,7 @@
 
 (defvar counsel-keepassxc-entry-mode-map (make-sparse-keymap)
   "Keymap for `counsel-keepassxc-entry-mode'.")
+(define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-a") 'counsel-keepassxc--add)
 (define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-c") 'counsel-keepassxc--entry-commit)
 (define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-e") 'counsel-keepassxc--entry-edit)
 (define-key counsel-keepassxc-entry-mode-map (kbd "C-c C-k") 'counsel-keepassxc--entry-abort)
