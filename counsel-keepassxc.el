@@ -23,8 +23,18 @@
 ;;; Code:
 
 (require 'ivy)
+(require 'password-cache)
 
 ;;** `counsel-keepassxc'
+(defcustom counsel-keepassxc-cache-expiry 60
+  "How many seconds to cache Keepassxc database password for.
+NIL to disable expiry."
+  :type '(choice (const :tag "Never" nil)
+          (const :tag "All Day" 86400)
+          (const :tag "2 Hours" 7200)
+          (const :tag "30 Minutes" 1800)
+          (integer :tag "Seconds")))
+
 (defvar counsel-keepassxc-database-file nil "Keepassxc password database file.")
 
 (defun counsel-keepassxc--candidates (master-password)
@@ -345,10 +355,14 @@
     (if entry-buffer
         (with-current-buffer entry-buffer
           (cadr (buffer-local-value 'keepassxc-candidate entry-buffer)))
-      (read-passwd
-       (format
-        "Master password for %s: "
-        counsel-keepassxc-database-file)))))
+      (let* ((password-prompt (format "Master password for %s: " counsel-keepassxc-database-file))
+             (password-cache-expiry counsel-keepassxc-cache-expiry)
+             (password
+              (cond
+               ((password-read-from-cache counsel-keepassxc-database-file))
+               ((password-read password-prompt counsel-keepassxc-database-file)))))
+        (password-cache-add counsel-keepassxc-database-file password)
+        password))))
 
 (defun counsel-keepassxc-get-password (path &optional master-password)
   "Get password by entry path."
