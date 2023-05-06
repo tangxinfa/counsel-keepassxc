@@ -37,6 +37,18 @@ NIL to disable expiry."
 
 (defvar counsel-keepassxc-database-file nil "Keepassxc password database file.")
 
+(defvar counsel-keepassxc--verbose nil "Output detailed error message for debug purpose.")
+
+(defun counsel-keepassxc--error-message ()
+  "Return error message when execute keepassxc-cli failed."
+  (require 'cl-seq)
+  (let ((output (string-trim (buffer-string))))
+    (if (cl-search "Invalid credentials were provided" output)
+        (password-cache-remove counsel-keepassxc-database-file))
+    (if counsel-keepassxc--verbose
+        (format "failed: %s" output)
+      "failed")))
+
 (defun counsel-keepassxc--candidates (master-password)
   "Return list of keepassxc entries, MASTER-PASSWORD to open database."
   (unless counsel-keepassxc-database-file
@@ -57,7 +69,7 @@ NIL to disable expiry."
                              ""))
             (if (not (eq 0 (apply 'call-process-region args)))
                 (error
-                 "Error: execute keepassxc-cli search failed"))
+                 "Error: execute keepassxc-cli search %s" (counsel-keepassxc--error-message)))
             (split-string (buffer-string) "\n")))
          (candidates
           (remove nil
@@ -110,7 +122,7 @@ NIL to disable expiry."
                        entry-path)))
       (if (not (eq 0 (apply 'call-process-region args)))
           (error
-           "Error: execute keepassxc-cli show failed"))
+           "Error: execute keepassxc-cli show %s" (counsel-keepassxc--error-message)))
       (counsel-keepassxc--entry-parse entry-path))))
 
 (defun counsel-keepassxc--copy-password (candidate)
@@ -146,7 +158,7 @@ NIL to disable expiry."
                         entry-path)))
        (if (not (eq 0 (apply 'call-process-region args)))
            (error
-            "Error: execute keepassxc-cli show failed"))
+            "Error: execute keepassxc-cli show %s" (counsel-keepassxc--error-message)))
        (save-excursion
          (goto-char (point-min))
          (beginning-of-line 2)
@@ -187,7 +199,7 @@ NIL to disable expiry."
              (point-min)
              (point-max)
              "keepassxc-cli"
-             t nil t
+             t t t
              action
              (expand-file-name counsel-keepassxc-database-file)
              (assoc-default "Title" entry nil "")
@@ -204,8 +216,8 @@ NIL to disable expiry."
       (setq return (apply 'call-process-region args)))
     (if (not (eq return 0))
         (error
-         "Error: execute keepassxc-cli %s failed"
-         action)
+         "Error: execute keepassxc-cli %s %s"
+         action (counsel-keepassxc--error-message))
       (when delete-old (counsel-keepassxc--delete candidate))
       (kill-buffer entry-buffer)
       (message "keepassxc-cli %s entry \"%s\" succeed"
@@ -335,7 +347,7 @@ NIL to disable expiry."
                  (car candidate))))
       (if (not (eq 0 (apply 'call-process-region args)))
           (error
-           "Error: execute keepassxc-cli delete failed")
+           "Error: execute keepassxc-cli delete %s" (counsel-keepassxc--error-message))
         (message "keepassxc-cli delete entry \"%s\" succeed" (car candidate))))))
 
 (ivy-set-actions 'counsel-keepassxc '(("u" counsel-keepassxc--copy-username "copy username")
@@ -349,6 +361,7 @@ NIL to disable expiry."
                                       ("d" counsel-keepassxc--delete "delete entry")))
 
 (defun counsel-keepassxc--read-password ()
+  "Read master password."
   (let ((entry-buffer (or (get-buffer "*keepassxc-view*")
                           (get-buffer "*keepassxc-edit*")
                           (get-buffer "*keepassxc-add*"))))
