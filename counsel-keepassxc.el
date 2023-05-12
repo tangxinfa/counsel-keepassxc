@@ -49,17 +49,17 @@ NIL to disable expiry."
         (format "failed: %s" output)
       "failed")))
 
-(defun counsel-keepassxc--candidates (master-password)
-  "Return list of keepassxc entries, MASTER-PASSWORD to open database."
+(defun counsel-keepassxc--candidates ()
+  "Return list of keepassxc entries."
   (unless counsel-keepassxc-database-file
     (signal
      'file-error
      (list "Opening `counsel-keepassxc-database-file'" "No such readable file"
            counsel-keepassxc-database-file)))
   (let* ((args)
-         (entries
+         (titles
           (with-temp-buffer
-            (insert master-password)
+            (insert (counsel-keepassxc--read-password))
             (setq args (list (point-min)
                              (point-max)
                              "keepassxc-cli"
@@ -74,22 +74,22 @@ NIL to disable expiry."
          (candidates
           (remove nil
                   (mapcar
-                   (lambda (entry)
+                   (lambda (title)
                      (unless (string-prefix-p "Enter password to unlock"
-                                              entry)
-                       (list entry master-password)))
-                   entries))))
+                                              title)
+                       title))
+                   titles))))
     candidates))
 
-(defun counsel-keepassxc--entry-parse (&optional entry-path)
-  "Parse entry in current buffer, ENTRY-PATH for the path of the entry."
+(defun counsel-keepassxc--entry-parse (&optional title)
+  "Parse entry in current buffer with preferred TITLE."
   (save-excursion
     (goto-char (point-min))
     (let ((entry)
           (fields)
           (filters '("UserName" "Password" "URL" "Notes")))
-      (if entry-path
-          (add-to-list 'entry (cons "Title" entry-path))
+      (if title
+          (add-to-list 'entry (cons "Title" title))
         (add-to-list 'filters "Title"))
       (while (not (eobp))
         (setq fields (split-string
@@ -106,12 +106,11 @@ NIL to disable expiry."
         (beginning-of-line 2))
       entry)))
 
-(defun counsel-keepassxc--entry-get (candidate)
-  "Get entry match CANDIDATE."
+(defun counsel-keepassxc--entry-get (title)
+  "Get entry by TITLE."
   (with-temp-buffer
-    (insert (cadr candidate))
-    (let* ((entry-path (car candidate))
-           (args (list (point-min)
+    (insert (counsel-keepassxc--read-password))
+    (let* ((args (list (point-min)
                        (point-max)
                        "keepassxc-cli"
                        t t nil
@@ -119,35 +118,34 @@ NIL to disable expiry."
                        "--show-protected"
                        (expand-file-name
                         counsel-keepassxc-database-file)
-                       entry-path)))
+                       title)))
       (if (not (eq 0 (apply 'call-process-region args)))
           (error
            "Error: execute keepassxc-cli show %s" (counsel-keepassxc--error-message)))
-      (counsel-keepassxc--entry-parse entry-path))))
+      (counsel-keepassxc--entry-parse title))))
 
-(defun counsel-keepassxc--copy-password (candidate)
-  "Copy password of CANDIDATE into current buffer."
-  (kill-new (assoc-default "Password" (counsel-keepassxc--entry-get candidate) nil "")))
+(defun counsel-keepassxc--copy-password (title)
+  "Copy password of entry identified by TITLE"
+  (kill-new (assoc-default "Password" (counsel-keepassxc--entry-get title) nil "")))
 
-(defun counsel-keepassxc--copy-username (candidate)
-  "Copy username of CANDIDATE into current buffer."
-  (kill-new (assoc-default "UserName" (counsel-keepassxc--entry-get candidate) nil "")))
+(defun counsel-keepassxc--copy-username (title)
+  "Copy username of entry identified by TITLE."
+  (kill-new (assoc-default "UserName" (counsel-keepassxc--entry-get title) nil "")))
 
-(defun counsel-keepassxc--copy-url (candidate)
-  "Copy url of CANDIDATE into current buffer."
-  (kill-new (assoc-default "URL" (counsel-keepassxc--entry-get candidate) nil "")))
+(defun counsel-keepassxc--copy-url (title)
+  "Copy url of entry identified by TITLE."
+  (kill-new (assoc-default "URL" (counsel-keepassxc--entry-get title) nil "")))
 
-(defun counsel-keepassxc--copy-notes (candidate)
-  "Copy notes of CANDIDATE into current buffer."
-  (kill-new (assoc-default "Notes" (counsel-keepassxc--entry-get candidate) nil "")))
+(defun counsel-keepassxc--copy-notes (title)
+  "Copy notes of entry identified by TITLE."
+  (kill-new (assoc-default "Notes" (counsel-keepassxc--entry-get title) nil "")))
 
-(defun counsel-keepassxc--copy-totp (candidate)
-  "Copy TOTP of CANDIDATE into current buffer."
+(defun counsel-keepassxc--copy-totp (title)
+  "Copy TOTP of entry identified by TITLE."
   (kill-new
    (with-temp-buffer
-     (insert (cadr candidate))
-     (let* ((entry-path (car candidate))
-            (args (list (point-min)
+     (insert (counsel-keepassxc--read-password))
+     (let* ((args (list (point-min)
                         (point-max)
                         "keepassxc-cli"
                         t t nil
@@ -155,7 +153,7 @@ NIL to disable expiry."
                         "--totp"
                         (expand-file-name
                          counsel-keepassxc-database-file)
-                        entry-path)))
+                        title)))
        (if (not (eq 0 (apply 'call-process-region args)))
            (error
             "Error: execute keepassxc-cli show %s" (counsel-keepassxc--error-message)))
@@ -170,12 +168,11 @@ NIL to disable expiry."
   "Commit added or edited entry."
   (interactive)
   (let* ((entry (counsel-keepassxc--entry-parse))
-         (return nil)
          (entry-buffer (current-buffer))
          (generates (split-string (assoc-default "Password" entry nil "") "Generate"))
          (args nil)
          (action (buffer-local-value 'keepassxc-action entry-buffer))
-         (candidate (buffer-local-value 'keepassxc-candidate entry-buffer))
+         (title (buffer-local-value 'keepassxc-candidate entry-buffer))
          (delete-old nil))
     (unless (or (string= action "edit")
                 (string= action "add"))
@@ -184,12 +181,12 @@ NIL to disable expiry."
        action))
     ;;;; If title changed when editing, treat as add a new entry and delete old entry.
     (when (and (string= action "edit")
-               (not (string= (string-trim-left (car candidate) "/")
+               (not (string= (string-trim-left title "/")
                              (string-trim-left (assoc-default "Title" entry nil "") "/"))))
       (setq action "add")
       (setq delete-old t))
     (with-temp-buffer
-      (insert (cadr (buffer-local-value 'keepassxc-candidate entry-buffer)))
+      (insert (counsel-keepassxc--read-password))
       (insert "\n")
       (when (< (length generates) 2)
         (insert (assoc-default "Password" entry nil ""))
@@ -199,7 +196,7 @@ NIL to disable expiry."
              (point-min)
              (point-max)
              "keepassxc-cli"
-             t t t
+             t t nil
              action
              (expand-file-name counsel-keepassxc-database-file)
              (assoc-default "Title" entry nil "")
@@ -213,12 +210,11 @@ NIL to disable expiry."
         (when (> (string-to-number (second generates)) 0)
           (add-to-list 'args "-L" t)
           (add-to-list 'args (second generates) t)))
-      (setq return (apply 'call-process-region args)))
-    (if (not (eq return 0))
-        (error
-         "Error: execute keepassxc-cli %s %s"
-         action (counsel-keepassxc--error-message))
-      (when delete-old (counsel-keepassxc--delete candidate))
+      (if (not (eq 0 (apply 'call-process-region args)))
+          (error
+           "Error: execute keepassxc-cli %s %s"
+           action (counsel-keepassxc--error-message)))
+      (when delete-old (counsel-keepassxc--delete title))
       (kill-buffer entry-buffer)
       (message "keepassxc-cli %s entry \"%s\" succeed"
                action
@@ -230,10 +226,16 @@ NIL to disable expiry."
   (unless (eq major-mode 'counsel-keepassxc-entry-mode)
     (error
      "Error: major-mode must be `counsel-keepassxc-entry-mode'"))
-  (let ((candidate keepassxc-candidate)
-        (position (point)))
+  (let* ((entry-buffer (current-buffer))
+         (action (buffer-local-value 'keepassxc-action entry-buffer))
+         (title (buffer-local-value 'keepassxc-candidate entry-buffer))
+         (position (point)))
+    (unless (string= action "view")
+      (error
+       "Error: edit not allowed when %s keepassxc entry"
+       action))
     (kill-buffer (current-buffer))
-    (counsel-keepassxc--edit candidate)
+    (counsel-keepassxc--edit title)
     (goto-char position)))
 
 (defun counsel-keepassxc--entry-abort ()
@@ -265,10 +267,10 @@ NIL to disable expiry."
   "major mode for editing keepassxc entry."
   (setq font-lock-defaults '(counsel-keepassxc-entry-highlights)))
 
-(defun counsel-keepassxc--view (&optional candidate)
-  "View entry, CANDIDATE is the entry to view."
+(defun counsel-keepassxc--view (title)
+  "View entry identified by TITLE."
   (let ((buffer (generate-new-buffer "*keepassxc-view*"))
-        (entry (counsel-keepassxc--entry-get candidate)))
+        (entry (counsel-keepassxc--entry-get title)))
     (with-current-buffer buffer
       (counsel-keepassxc-entry-mode)
       (insert (format
@@ -281,14 +283,14 @@ NIL to disable expiry."
       (forward-line -5)
       (goto-char (point-at-eol))
       (read-only-mode)
-      (set (make-local-variable 'keepassxc-candidate) candidate)
+      (set (make-local-variable 'keepassxc-candidate) title)
       (set (make-local-variable 'keepassxc-action) "view"))
     (switch-to-buffer buffer)))
 
-(defun counsel-keepassxc--edit (&optional candidate)
-  "Edit entry, CANDIDATE is the entry to edit."
+(defun counsel-keepassxc--edit (title)
+  "Edit entry identified by TITLE."
   (let ((buffer (generate-new-buffer "*keepassxc-edit*"))
-        (entry (counsel-keepassxc--entry-get candidate)))
+        (entry (counsel-keepassxc--entry-get title)))
     (with-current-buffer
         buffer (insert
                 (format "Edit Keepassxc Entry.\n========================\nTitle: %s\nUserName: %s\nPassword: %s\nURL: %s\n"
@@ -299,26 +301,26 @@ NIL to disable expiry."
         (forward-line -4)
         (goto-char (point-at-eol))
         (counsel-keepassxc-entry-mode)
-        (set (make-local-variable 'keepassxc-candidate) candidate)
+        (set (make-local-variable 'keepassxc-candidate) title)
         (set (make-local-variable 'keepassxc-action) "edit"))
     (switch-to-buffer buffer)))
 
-(defun counsel-keepassxc--add (candidate)
-  "Add entry, CANDIDATE is useless."
+(defun counsel-keepassxc--add (&rest _)
+  "Add entry."
   (let ((buffer (generate-new-buffer "*keepassxc-add*")))
     (with-current-buffer buffer (insert
                                  "Add Keepassxc Entry.\n========================\nTitle: \nUserName: \nPassword: Generate10\nURL: \n")
                          (forward-line -4)
                          (goto-char (point-at-eol))
                          (counsel-keepassxc-entry-mode)
-                         (set (make-local-variable 'keepassxc-candidate) candidate)
+                         (set (make-local-variable 'keepassxc-candidate) nil)
                          (set (make-local-variable 'keepassxc-action) "add"))
     (switch-to-buffer buffer)))
 
-(defun counsel-keepassxc--clone (candidate)
-  "Clone entry, CANDIDATE is useless."
+(defun counsel-keepassxc--clone (title)
+  "Clone entry identified by TITLE."
   (let ((buffer (generate-new-buffer "*keepassxc-clone*"))
-        (entry (counsel-keepassxc--entry-get candidate)))
+        (entry (counsel-keepassxc--entry-get title)))
     (with-current-buffer buffer
       (insert (format
                "Clone Keepassxc Entry.\n========================\nTitle: %s\nUserName: %s\nPassword: %s\nURL: %s\n"
@@ -329,14 +331,14 @@ NIL to disable expiry."
       (forward-line -4)
       (goto-char (point-at-eol))
       (counsel-keepassxc-entry-mode)
-      (set (make-local-variable 'keepassxc-candidate) candidate)
+      (set (make-local-variable 'keepassxc-candidate) title)
       (set (make-local-variable 'keepassxc-action) "add"))
     (switch-to-buffer buffer)))
 
-(defun counsel-keepassxc--delete (candidate)
-  "Delete entry, CANDIDATE is the entry to delete."
+(defun counsel-keepassxc--delete (title)
+  "Delete entry identified by TITLE."
   (with-temp-buffer
-    (insert (cadr candidate))
+    (insert (counsel-keepassxc--read-password))
     (let ((args (list
                  (point-min)
                  (point-max)
@@ -344,11 +346,11 @@ NIL to disable expiry."
                  t t nil
                  "rm"
                  (expand-file-name counsel-keepassxc-database-file)
-                 (car candidate))))
+                 title)))
       (if (not (eq 0 (apply 'call-process-region args)))
           (error
            "Error: execute keepassxc-cli delete %s" (counsel-keepassxc--error-message))
-        (message "keepassxc-cli delete entry \"%s\" succeed" (car candidate))))))
+        (message "keepassxc-cli delete entry \"%s\" succeed" title)))))
 
 (ivy-set-actions 'counsel-keepassxc '(("u" counsel-keepassxc--copy-username "copy username")
                                       ("p" counsel-keepassxc--copy-password "copy password")
@@ -362,52 +364,41 @@ NIL to disable expiry."
 
 (defun counsel-keepassxc--read-password ()
   "Read master password."
-  (let ((entry-buffer (or (get-buffer "*keepassxc-view*")
-                          (get-buffer "*keepassxc-edit*")
-                          (get-buffer "*keepassxc-add*"))))
-    (if entry-buffer
-        (with-current-buffer entry-buffer
-          (cadr (buffer-local-value 'keepassxc-candidate entry-buffer)))
-      (let* ((password-prompt (format "Master password for %s: " counsel-keepassxc-database-file))
-             (password-cache-expiry counsel-keepassxc-cache-expiry)
-             (password
-              (cond
-               ((password-read-from-cache counsel-keepassxc-database-file))
-               ((password-read password-prompt counsel-keepassxc-database-file)))))
-        (password-cache-add counsel-keepassxc-database-file password)
-        password))))
+  (let* ((password-prompt (format "Master password for %s: " counsel-keepassxc-database-file))
+         (password-cache-expiry counsel-keepassxc-cache-expiry)
+         (password
+          (cond
+           ((password-read-from-cache counsel-keepassxc-database-file))
+           ((password-read password-prompt counsel-keepassxc-database-file)))))
+    (password-cache-add counsel-keepassxc-database-file password)
+    password))
 
-(defun counsel-keepassxc-get-password (path &optional master-password)
-  "Get password by entry path."
+(defun counsel-keepassxc-get-password (title)
+  "Get password of entry identified by TITLE."
   (assoc-default
    "Password"
-   (counsel-keepassxc--entry-get
-    (list
-     path
-     (or
-      master-password
-      (counsel-keepassxc--read-password))))))
+   (counsel-keepassxc--entry-get title)))
 
-(defun counsel-keepassxc-get-username (path &optional master-password)
-  "Get username by entry path."
+(defun counsel-keepassxc-get-username (title)
+  "Get username of entry identified by TITLE."
   (assoc-default
    "UserName"
-   (counsel-keepassxc--entry-get
-    (list
-     path
-     (or
-      master-password
-      (counsel-keepassxc--read-password))))))
+   (counsel-keepassxc--entry-get title)))
+
+(defun counsel-keepassxc-insert-password ()
+  "Insert password of entry."
+  (interactive)
+  (let ((counsel-keepassxc-default-action #'(lambda (&rest _))))
+    (insert (counsel-keepassxc-get-password (counsel-keepassxc)))))
 
 (defvar counsel-keepassxc-default-action #'counsel-keepassxc--view "`counsel-keepassxc' default action.")
 
 ;;;###autoload
-(defun counsel-keepassxc (&optional master-password)
+(defun counsel-keepassxc ()
   "Complete keepassxc password with Ivy."
   (interactive)
   (ivy-read "keepassxc: "
-            (counsel-keepassxc--candidates
-             (or master-password (counsel-keepassxc--read-password)))
+            (counsel-keepassxc--candidates)
             :history 'counsel-keepassxc-history
             :action counsel-keepassxc-default-action
             :caller 'counsel-keepassxc
